@@ -1,0 +1,172 @@
+version: "3.7"
+
+services:
+  n8n_editor:
+    image: n8nio/n8n:latest
+    command: start
+    networks:
+      - SUA_REDE
+    
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_DATABASE=n8n_queue
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_USER=postgres
+      - DB_POSTGRESDB_PASSWORD=SENHA_POSTGRES
+      - N8N_ENCRYPTION_KEY=r3djGX2vPoeL9zKL
+      - N8N_HOST=URL_FRONT
+      - N8N_EDITOR_BASE_URL=https://URL_FRONT/
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://URL_WEBHOOK/
+      - EXECUTIONS_MODE=queue
+      - EXECUTIONS_TIMEOUT=600         # mata execuções após 10 min
+      - EXECUTIONS_TIMEOUT_MAX=600     # impede overrides maiores
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_BULL_REDIS_PASSWORD=SENHA_POSTGRES
+      - QUEUE_BULL_REDIS_DB=2
+      - NODE_FUNCTION_ALLOW_EXTERNAL=moment,lodash,moment-with-locales
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=336
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.n8n_editor.rule=Host(`URL_FRONT`)
+        - traefik.http.routers.n8n_editor.entrypoints=websecure
+        - traefik.http.routers.n8n_editor.priority=1
+        - traefik.http.routers.n8n_editor.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.n8n_editor.service=n8n_editor
+        - traefik.http.services.n8n_editor.loadbalancer.server.port=5678
+        - traefik.http.services.n8n_editor.loadbalancer.passHostHeader=1
+        # Router específico para /mcp (sem GZIP) No Editor - PRIORIDADE MAIOR
+        # Middleware para remover GZIP
+        - traefik.http.middlewares.nogzip.headers.customResponseHeaders.Content-Encoding=""
+        - traefik.http.routers.n8n_editor_nogzip.rule=Host(`URL_FRONT`) && PathPrefix(`/mcp`)
+        - traefik.http.routers.n8n_editor_nogzip.entrypoints=websecure
+        - traefik.http.routers.n8n_editor_nogzip.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.n8n_editor_nogzip.service=n8n_editor_nogzip
+        - traefik.http.routers.n8n_editor_nogzip.middlewares=nogzip
+        - traefik.http.routers.n8n_editor_nogzip.priority=20
+
+  n8n_webhook:
+    image: n8nio/n8n:latest
+    command: webhook
+    networks:
+      - SUA_REDE
+      
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_DATABASE=n8n_queue
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_USER=postgres
+      - DB_POSTGRESDB_PASSWORD=SENHA_POSTGRES
+      - N8N_ENCRYPTION_KEY=r3djGX2vPoeL9zKL
+      - N8N_HOST=URL_FRONT
+      - N8N_EDITOR_BASE_URL=https://URL_FRONT/
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://URL_WEBHOOK/
+      - EXECUTIONS_MODE=queue
+      - EXECUTIONS_TIMEOUT=600         # mata execuções após 10 min
+      - EXECUTIONS_TIMEOUT_MAX=600     # impede overrides maiores
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_BULL_REDIS_PASSWORD=SENHA_POSTGRES
+      - QUEUE_BULL_REDIS_DB=2
+      - NODE_FUNCTION_ALLOW_EXTERNAL=moment,lodash,moment-with-locales
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=336
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.n8n_webhook.rule=(Host(`URL_WEBHOOK`))
+        - traefik.http.routers.n8n_webhook.entrypoints=websecure
+        - traefik.http.routers.n8n_webhook.priority=1
+        - traefik.http.routers.n8n_webhook.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.n8n_webhook.service=n8n_webhook
+        - traefik.http.services.n8n_webhook.loadbalancer.server.port=5678
+        - traefik.http.services.n8n_webhook.loadbalancer.passHostHeader=1
+        # Router específico para /mcp (sem GZIP) no Webhook - PRIORIDADE MAIOR
+        # Middleware para remover GZIP
+        - traefik.http.middlewares.nogzip.headers.customResponseHeaders.Content-Encoding=""
+        - traefik.http.routers.n8n_webhook_nogzip.rule=Host(`URL_WEBHOOK`) && PathPrefix(`/mcp`)
+        - traefik.http.routers.n8n_webhook_nogzip.entrypoints=websecure
+        - traefik.http.routers.n8n_webhook_nogzip.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.n8n_webhook_nogzip.service=n8n_webhook_nogzip
+        - traefik.http.routers.n8n_webhook_nogzip.middlewares=nogzip
+        - traefik.http.routers.n8n_webhook_nogzip.priority=20
+
+  n8n_worker:
+    image: n8nio/n8n:latest
+    command: worker --concurrency=10
+    networks:
+      - SUA_REDE
+    
+      
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_DATABASE=n8n_queue
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_USER=postgres
+      - DB_POSTGRESDB_PASSWORD=SENHA_POSTGRES
+      - N8N_ENCRYPTION_KEY=r3djGX2vPoeL9zKL
+      - N8N_HOST=URL_FRONT
+      - N8N_EDITOR_BASE_URL=https://URL_FRONT/
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://URL_WEBHOOK/
+      - EXECUTIONS_MODE=queue
+      - EXECUTIONS_TIMEOUT=600         # mata execuções após 10 min
+      - EXECUTIONS_TIMEOUT_MAX=600     # impede overrides maiores
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_BULL_REDIS_PASSWORD=SENHA_POSTGRES
+      - QUEUE_BULL_REDIS_DB=2
+      - NODE_FUNCTION_ALLOW_EXTERNAL=moment,lodash,moment-with-locales
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=336
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+
+
+
+networks:
+  SUA_REDE:
+    name: SUA_REDE
+    external: true
